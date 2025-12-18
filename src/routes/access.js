@@ -9,10 +9,71 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// ==================== ESTADO SIMULADO DE LA BARRERA ====================
+// Simula el estado del NodeMCU (ya que no hay hardware físico)
+let barrierState = {
+  estado: 'CERRADA',           // 'ABIERTA' | 'CERRADA'
+  ultimaActualizacion: new Date(),
+  ultimoEvento: null,
+  departamento: null,
+  usuario: null,
+  tiempoApertura: null         // Timestamp cuando se abrió
+};
+
+// Función para actualizar estado de la barrera
+function actualizarBarrera(estado, evento = null, departamento = null, usuario = null) {
+  barrierState.estado = estado;
+  barrierState.ultimaActualizacion = new Date();
+  barrierState.ultimoEvento = evento;
+  barrierState.departamento = departamento;
+  barrierState.usuario = usuario;
+
+  if (estado === 'ABIERTA') {
+    barrierState.tiempoApertura = Date.now();
+
+    // Auto-cerrar después de 10 segundos
+    setTimeout(() => {
+      if (barrierState.estado === 'ABIERTA') {
+        barrierState.estado = 'CERRADA';
+        barrierState.ultimaActualizacion = new Date();
+        barrierState.ultimoEvento = 'AUTO_CIERRE';
+        console.log('[BARRERA] Cerrada automáticamente (10 segundos)');
+      }
+    }, 10000);
+  } else {
+    barrierState.tiempoApertura = null;
+  }
+
+  console.log(`[BARRERA] Estado: ${estado} - Evento: ${evento || 'N/A'}`);
+}
+
+/**
+ * GET /api/access/barrier-status
+ * Obtiene el estado actual de la barrera (simulada)
+ * Usado por la app móvil para mostrar el estado en tiempo real
+ */
+router.get('/barrier-status', (req, res) => {
+  try {
+    return res.status(200).json({
+      estado: barrierState.estado,
+      ultimaActualizacion: barrierState.ultimaActualizacion,
+      ultimoEvento: barrierState.ultimoEvento,
+      departamento: barrierState.departamento,
+      usuario: barrierState.usuario,
+      tiempoAbierta: barrierState.tiempoApertura
+        ? Math.floor((Date.now() - barrierState.tiempoApertura) / 1000)
+        : null
+    });
+  } catch (error) {
+    console.error('Error obteniendo estado de barrera:', error);
+    return res.status(500).json({ error: 'Error al obtener estado de barrera' });
+  }
+});
+
 /**
  * POST /api/access/validate
  * Valida si una MAC de sensor RFID tiene acceso permitido
- * Usado por el NodeMCU para validar tarjetas/llaveros
+ * Usado por Postman para simular lectura de tarjeta RFID (sin NodeMCU físico)
  */
 router.post('/validate', async (req, res) => {
   try {
@@ -79,7 +140,18 @@ router.post('/validate', async (req, res) => {
 
     console.log(`[RFID] ${tipoEvento}: ${macNormalizada} - ${mensaje}`);
 
-    // Respuesta al NodeMCU
+    // SIMULACIÓN: Actualizar estado de la barrera (simula el NodeMCU)
+    if (accesoPermitido) {
+      actualizarBarrera(
+        'ABIERTA',
+        tipoEvento,
+        sensor.id_departamento,
+        sensor.id_usuario_registro
+      );
+    }
+    // Si el acceso es denegado, la barrera se mantiene cerrada (no hacemos nada)
+
+    // Respuesta (simulando lo que respondería el NodeMCU)
     return res.status(200).json({
       acceso_permitido: accesoPermitido,
       mensaje: mensaje,
@@ -147,6 +219,9 @@ router.post('/manual-open', authenticateToken, async (req, res) => {
       fecha_hora: db.fn.now()
     });
 
+    // SIMULACIÓN: Actualizar estado de la barrera inmediatamente
+    actualizarBarrera('ABIERTA', 'APERTURA_MANUAL', user.id_departamento, userId);
+
     console.log(`[APP] Apertura manual - Usuario: ${user.name} - Depto: ${user.id_departamento}`);
 
     return res.status(200).json({
@@ -205,6 +280,9 @@ router.post('/manual-close', authenticateToken, async (req, res) => {
       detalles: `Cierre manual desde app - Usuario: ${user.name}`,
       fecha_hora: db.fn.now()
     });
+
+    // SIMULACIÓN: Actualizar estado de la barrera inmediatamente
+    actualizarBarrera('CERRADA', 'CIERRE_MANUAL', user.id_departamento, userId);
 
     console.log(`[APP] Cierre manual - Usuario: ${user.name} - Depto: ${user.id_departamento}`);
 

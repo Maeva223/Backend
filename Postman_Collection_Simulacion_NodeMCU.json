@@ -1,0 +1,426 @@
+{
+  "info": {
+    "name": "Backend Simulando NodeMCU",
+    "description": "Colección completa: Backend simula NodeMCU, Postman simula sensor RFID, App consulta estado",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Estado de la Barrera (NUEVO)",
+      "item": [
+        {
+          "name": "Consultar Estado de Barrera",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/access/barrier-status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "barrier-status"]
+            },
+            "description": "**ENDPOINT NUEVO** - Consulta el estado actual de la barrera simulada.\n\n**Respuestas posibles:**\n\n**CERRADA:**\n```json\n{\n  \"estado\": \"CERRADA\",\n  \"ultimaActualizacion\": \"2025-12-17T22:30:15.123Z\",\n  \"ultimoEvento\": \"AUTO_CIERRE\",\n  \"departamento\": 1,\n  \"usuario\": 1,\n  \"tiempoAbierta\": null\n}\n```\n\n**ABIERTA:**\n```json\n{\n  \"estado\": \"ABIERTA\",\n  \"ultimaActualizacion\": \"2025-12-17T22:30:05.123Z\",\n  \"ultimoEvento\": \"ACCESO_VALIDO\",\n  \"departamento\": 1,\n  \"usuario\": 1,\n  \"tiempoAbierta\": 3\n}\n```\n\n**Campo tiempoAbierta:**\n- `null` = Barrera cerrada\n- `3` = Lleva 3 segundos abierta (auto-cierre a los 10)\n\n**USO:**\n- La app móvil debe consultar este endpoint cada 1-2 segundos\n- Permite monitoreo en tiempo real del estado de la barrera"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Postman Simula Sensor RFID",
+      "item": [
+        {
+          "name": "Pasar Tarjeta VÁLIDA (Abre Barrera)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Verificar que se permitió el acceso",
+                  "pm.test(\"Acceso permitido\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.acceso_permitido).to.eql(true);",
+                  "});",
+                  "",
+                  "// Mensaje de éxito",
+                  "pm.test(\"Mensaje de éxito\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.mensaje).to.include(\"Acceso permitido\");",
+                  "});",
+                  "",
+                  "console.log(\"✅ BARRERA ABIERTA - Se cerrará automáticamente en 10 segundos\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mac_sensor\": \"A1:B2:C3:D4\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/validate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "validate"]
+            },
+            "description": "**SIMULA:** Usuario pasa una tarjeta RFID válida por el sensor.\n\n**QUÉ HACE EL BACKEND (automático):**\n1. ✅ Valida la tarjeta en la BD\n2. ✅ Registra evento de acceso\n3. ✅ **ABRE LA BARRERA** (estado: ABIERTA)\n4. ⏰ Programa auto-cierre en 10 segundos\n5. 📤 Responde con acceso_permitido: true\n\n**QUÉ HARÍA EL ARDUINO REAL:**\n- LED verde\n- Servo a 90° (barrera abierta)\n- Espera 10 seg\n- Servo a 0° (barrera cerrada)\n\n**AHORA (sin Arduino):**\n- El backend controla el estado virtual\n- La app consulta GET /barrier-status para ver el estado\n\n**DESPUÉS DE EJECUTAR:**\nConsulta inmediatamente: GET /api/access/barrier-status\nVerás: estado: \"ABIERTA\"\n\nEspera 10 segundos y vuelve a consultar.\nVerás: estado: \"CERRADA\""
+          }
+        },
+        {
+          "name": "Pasar Tarjeta NO REGISTRADA (Denegada)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Acceso denegado\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.acceso_permitido).to.eql(false);",
+                  "});",
+                  "",
+                  "console.log(\"❌ BARRERA CERRADA - Tarjeta no registrada\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mac_sensor\": \"FF:FF:FF:FF\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/validate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "validate"]
+            },
+            "description": "**SIMULA:** Usuario pasa una tarjeta RFID NO registrada.\n\n**QUÉ HACE EL BACKEND:**\n1. ❌ No encuentra la tarjeta en BD\n2. ❌ **NO ABRE LA BARRERA**\n3. 📤 Responde con acceso_permitido: false\n\n**QUÉ HARÍA EL ARDUINO REAL:**\n- LED rojo\n- Barrera cerrada (servo en 0°)\n- Beep de error\n\n**AHORA:**\nLa barrera permanece en estado CERRADA.\n\nConsulta: GET /api/access/barrier-status\nVerás: estado: \"CERRADA\""
+          }
+        },
+        {
+          "name": "Pasar Tarjeta BLOQUEADA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mac_sensor\": \"E5:F6:G7:H8\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/validate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "validate"]
+            },
+            "description": "**SIMULA:** Usuario pasa una tarjeta que fue bloqueada por el admin.\n\n**NOTA:** Primero debes bloquear un sensor:\n1. Hacer login: POST /auth/login\n2. Bloquear: PUT /api/sensors/2/block\n3. Intentar acceso con esa MAC\n\n**RESPUESTA:**\n- acceso_permitido: false\n- mensaje: \"Sensor BLOQUEADO\"\n- Barrera permanece CERRADA"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. App Móvil - Autenticación",
+      "item": [
+        {
+          "name": "Login (Obtener Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Guardar token automáticamente en variable de entorno",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.environment.set(\"token\", jsonData.token);",
+                  "    console.log(\"✅ Token guardado: \" + jsonData.token.substring(0, 20) + \"...\");",
+                  "} else {",
+                  "    console.log(\"❌ No se recibió token\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo@example.com\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/auth/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "login"]
+            },
+            "description": "Hace login y obtiene token JWT.\n\nEl token se guarda automáticamente en la variable {{token}} y se usa en las siguientes peticiones.\n\n**Credenciales por defecto:**\n- Email: demo@example.com\n- Password: 123456"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. App Móvil - Control Manual",
+      "item": [
+        {
+          "name": "Abrir Barrera Manualmente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Barrera abierta exitosamente\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "});",
+                  "",
+                  "console.log(\"✅ BARRERA ABIERTA MANUALMENTE\");",
+                  "console.log(\"ℹ️  Consulta GET /barrier-status para verificar\");",
+                  "console.log(\"⏰ Se cerrará automáticamente en 10 segundos\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Token obtenido del login"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/manual-open",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "manual-open"]
+            },
+            "description": "**SIMULA:** Usuario presiona \"Abrir Barrera\" en la app móvil.\n\n**QUÉ HACE EL BACKEND (inmediatamente):**\n1. ✅ Valida token JWT\n2. ✅ **ABRE LA BARRERA INMEDIATAMENTE**\n3. ⏰ Auto-cierre en 10 segundos\n4. 📤 Responde con success: true\n\n**IMPORTANTE:**\n- Requiere token JWT (ejecuta Login primero)\n- El estado cambia INSTANTÁNEAMENTE (sin esperar al NodeMCU)\n\n**VERIFICAR:**\nConsulta: GET /api/access/barrier-status\nVerás: estado: \"ABIERTA\", ultimoEvento: \"APERTURA_MANUAL\""
+          }
+        },
+        {
+          "name": "Cerrar Barrera Manualmente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Barrera cerrada exitosamente\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "});",
+                  "",
+                  "console.log(\"✅ BARRERA CERRADA MANUALMENTE\");",
+                  "console.log(\"ℹ️  Consulta GET /barrier-status para verificar\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/manual-close",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "manual-close"]
+            },
+            "description": "**SIMULA:** Usuario presiona \"Cerrar Barrera\" en la app móvil.\n\n**QUÉ HACE EL BACKEND:**\n1. ✅ **CIERRA LA BARRERA INMEDIATAMENTE**\n2. 📤 Responde con success: true\n\n**VERIFICAR:**\nConsulta: GET /api/access/barrier-status\nVerás: estado: \"CERRADA\", ultimoEvento: \"CIERRE_MANUAL\""
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Gestión de Sensores",
+      "item": [
+        {
+          "name": "Listar Sensores del Departamento",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/api/sensors/department/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "sensors", "department", "1"]
+            },
+            "description": "Lista todos los sensores RFID del departamento.\n\nMuestra:\n- ID del sensor\n- MAC (código RFID)\n- Tipo (Tarjeta/Llavero)\n- Estado (ACTIVO/BLOQUEADO/INACTIVO)\n- Alias\n- Fechas"
+          }
+        },
+        {
+          "name": "Registrar Nuevo Sensor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo_sensor\": \"11:22:33:44:55:66\",\n  \"tipo\": \"Tarjeta\",\n  \"alias\": \"Tarjeta Nueva\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/sensors/register",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "sensors", "register"]
+            },
+            "description": "Registra un nuevo sensor RFID.\n\n**IMPORTANTE:**\n- Solo usuarios ADMIN\n- La MAC debe ser única\n- Tipo: 'Tarjeta' o 'Llavero'\n\n**USO:**\nUna vez registrado, puedes usar esa MAC en Postman para simular pasar la tarjeta."
+          }
+        },
+        {
+          "name": "Bloquear Sensor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/api/sensors/2/block",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "sensors", "2", "block"]
+            },
+            "description": "Bloquea un sensor (ej. reportado como robado).\n\n**DESPUÉS:**\nSi intentas validar esa MAC, responderá:\n- acceso_permitido: false\n- mensaje: \"Sensor BLOQUEADO\""
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Historial y Monitoreo",
+      "item": [
+        {
+          "name": "Ver Historial de Accesos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/api/access/history/1?limit=20",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "history", "1"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Cantidad de eventos"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Obtiene el historial de eventos del departamento.\n\n**Muestra:**\n- ACCESO_VALIDO (tarjeta válida)\n- ACCESO_RECHAZADO (tarjeta no registrada)\n- SENSOR_BLOQUEADO\n- APERTURA_MANUAL\n- CIERRE_MANUAL\n- Fechas y horas\n- Usuario y sensor involucrado"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": [""]
+        },
+        "description": "Verifica que el backend esté corriendo.\n\nRespuesta esperada:\n```json\n{\n  \"ok\": true,\n  \"status\": \"Node auth sample running\"\n}\n```"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

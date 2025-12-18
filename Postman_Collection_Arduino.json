@@ -1,0 +1,376 @@
+{
+  "info": {
+    "name": "Arduino - Control Acceso RFID",
+    "description": "Colección para simular peticiones del Arduino NodeMCU al Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Arduino - Validación RFID",
+      "item": [
+        {
+          "name": "Validar Tarjeta PERMITIDA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mac_sensor\": \"A1:B2:C3:D4\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/validate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "validate"]
+            },
+            "description": "Simula cuando el Arduino lee una tarjeta RFID registrada y activa.\n\n**Respuesta esperada:**\n- acceso_permitido: true\n- LED verde\n- Barrera abierta"
+          }
+        },
+        {
+          "name": "Validar Tarjeta DENEGADA (No registrada)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mac_sensor\": \"FF:FF:FF:FF\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/validate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "validate"]
+            },
+            "description": "Simula cuando el Arduino lee una tarjeta NO registrada en el sistema.\n\n**Respuesta esperada:**\n- acceso_permitido: false\n- mensaje: 'Sensor no registrado en el sistema'\n- LED rojo\n- Barrera cerrada"
+          }
+        },
+        {
+          "name": "Validar Tarjeta BLOQUEADA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mac_sensor\": \"E5:F6:G7:H8\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/validate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "validate"]
+            },
+            "description": "Simula cuando el Arduino lee una tarjeta que fue bloqueada por el admin.\n\n**NOTA:** Primero debes tener un sensor bloqueado en la BD:\n```sql\nUPDATE sensores SET estado = 'BLOQUEADO' WHERE id_sensor = 2;\n```"
+          }
+        },
+        {
+          "name": "Validar Tarjeta INACTIVA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mac_sensor\": \"11:22:33:44\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/validate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "validate"]
+            },
+            "description": "Simula cuando el Arduino lee una tarjeta que está inactiva."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Arduino - Consultar Comandos",
+      "item": [
+        {
+          "name": "Obtener Comandos Pendientes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/access/get-command",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "get-command"]
+            },
+            "description": "El Arduino consulta esto cada 2 segundos para ver si hay comandos de apertura/cierre manual desde la app.\n\n**Respuestas posibles:**\n- `{\"comando\": null}` → Sin comandos\n- `{\"comando\": \"ABRIR\"}` → Abrir barrera\n- `{\"comando\": \"CERRAR\"}` → Cerrar barrera\n\n**IMPORTANTE:** Una vez que el Arduino obtiene un comando, este se marca como EJECUTADO y desaparece."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. App Móvil - Autenticación",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Guardar token automáticamente",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.environment.set(\"token\", jsonData.token);",
+                  "    console.log(\"Token guardado: \" + jsonData.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo@example.com\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/auth/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["auth", "login"]
+            },
+            "description": "Hace login con el usuario demo y obtiene el token JWT.\n\n**Credenciales por defecto:**\n- Email: demo@example.com\n- Password: 123456\n\n**IMPORTANTE:** El token se guarda automáticamente en la variable de entorno `token` y se usará en las siguientes peticiones."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. App Móvil - Control Manual Barrera",
+      "item": [
+        {
+          "name": "Abrir Barrera Manualmente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Token JWT obtenido del login"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/manual-open",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "manual-open"]
+            },
+            "description": "Simula cuando el usuario presiona el botón 'Abrir Barrera' en la app móvil.\n\n**Flujo:**\n1. App envía comando de apertura\n2. Backend crea comando con estado PENDIENTE\n3. Arduino consulta comandos (cada 2 seg)\n4. Backend responde con {\"comando\": \"ABRIR\"}\n5. Arduino abre la barrera\n6. Comando se marca como EJECUTADO\n\n**IMPORTANTE:** Requiere token JWT. Ejecuta 'Login' primero."
+          }
+        },
+        {
+          "name": "Cerrar Barrera Manualmente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "Token JWT obtenido del login"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/access/manual-close",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "manual-close"]
+            },
+            "description": "Simula cuando el usuario presiona el botón 'Cerrar Barrera' en la app móvil.\n\n**IMPORTANTE:** Requiere token JWT. Ejecuta 'Login' primero."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Gestión de Sensores (ADMIN)",
+      "item": [
+        {
+          "name": "Listar Sensores del Departamento",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/api/sensors/department/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "sensors", "department", "1"]
+            },
+            "description": "Lista todos los sensores RFID del departamento.\n\n**IMPORTANTE:** Requiere autenticación. El usuario debe pertenecer al departamento consultado."
+          }
+        },
+        {
+          "name": "Registrar Nuevo Sensor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo_sensor\": \"AA:BB:CC:DD:EE:FF\",\n  \"tipo\": \"Tarjeta\",\n  \"alias\": \"Tarjeta Nueva - Depto 101\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/sensors/register",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "sensors", "register"]
+            },
+            "description": "Registra un nuevo sensor RFID.\n\n**IMPORTANTE:**\n- Solo usuarios ADMIN pueden registrar sensores\n- El código del sensor debe ser único\n- Tipo puede ser: 'Tarjeta' o 'Llavero'"
+          }
+        },
+        {
+          "name": "Bloquear Sensor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/api/sensors/2/block",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "sensors", "2", "block"]
+            },
+            "description": "Bloquea un sensor RFID (por ejemplo, si se reporta como robado).\n\n**IMPORTANTE:** Solo usuarios ADMIN del mismo departamento pueden bloquear sensores."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Historial de Accesos",
+      "item": [
+        {
+          "name": "Ver Historial de Accesos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/api/access/history/1?limit=10",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "access", "history", "1"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Cantidad de eventos a mostrar"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Offset para paginación",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Obtiene el historial de eventos de acceso del departamento.\n\nMuestra:\n- Accesos válidos\n- Accesos rechazados\n- Sensores bloqueados\n- Aperturas manuales\n- Etc."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": [""]
+        },
+        "description": "Verifica que el backend esté corriendo correctamente.\n\n**Respuesta esperada:**\n```json\n{\n  \"ok\": true,\n  \"status\": \"Node auth sample running\"\n}\n```"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
